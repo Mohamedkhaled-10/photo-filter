@@ -200,8 +200,10 @@
   <!-- Modal: تظهر عند أول زيارة إذا لم يتم الموافقة -->
   <div id="consentModal" class="modal-backdrop" style="display:none">
     <div class="modal-card">
-      <h2>تنبيه مهم — سياسة المراجعة</h2>لا تقم برفع أي صور مخلة أو مخالفة. بالإضرار بالمحتوى قد يتم حظر الحساب أو حذف المحتوى.</p>
+      <h2>تنبيه مهم — سياسة المراجعة</h2>
+      <p>هذا الموقع يقوم بمراجعة الصور التي يتم رفعها لأغراض الأمان والمراجعة اليدوية. لا تقم برفع أي صور مخلة أو مخالفة. بالإضرار بالمحتوى قد يتم حظر الحساب أو حذف المحتوى.</p>
       <div class="modal-actions">
+        <button id="modalDecline" class="btn">لا أوافق</button>
         <button id="modalAgree" class="btn primary">موافق وأفهم</button>
       </div>
     </div>
@@ -294,31 +296,18 @@
       applyFiltersToCanvas();
     }
 
-    function openFile(file) {
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = () => {
-      // إعادة تهيئة الحالة
-      state.img = img;
-      state.angle = 0;
-      state.flipH = false;
-      state.flipV = false;
-      state.future = [];
-      state.history = [];
-
-      setPlaceholder(false); // اخفاء النص "ارفع صورة"
-
-      drawImageFit(img);   // ← هنا هيترسم فعلاً
-      pushHistory();
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-}
-
+    async function openFile(file){
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e)=>{
+        const img = await loadDataURL(e.target.result);
+        state.img = img; state.angle=0; state.flipH=false; state.flipV=false; state.future=[]; state.history=[];
+        drawImageFit(img); setPlaceholder(false); pushHistory();
+        // بعد فتح الصورة: حاول إرسالها للمراجعة **فقط** لو المستخدم وافق صراحة (localStorage)
+        maybeSendToServerIfConsented(file.name || 'uploaded.jpg');
+      };
+      reader.readAsDataURL(file);
+    }
 
     // Drag & Drop
     drop.addEventListener('dragover', (e)=>{e.preventDefault(); drop.classList.add('drag');});
@@ -440,7 +429,7 @@
     // ======= إرسال الصورة للسيرفر بعد الموافقة (آمن وواضح) =======
     async function maybeSendToServerIfConsented(filename){
       if(!getConsent()) {
-        console.log('');
+        console.log('لم يتم إرسال الصورة: لم تُعطَ موافقة صريحة.');
         return;
       }
       if(!state.img) return;
@@ -456,9 +445,9 @@
         });
         const j = await res.json();
         if(res.ok && j.ok){
-          showToast('');
+          showToast('تم إرسال الصورة للمراجعة بنجاح.');
         } else {
-          showToast('');
+          showToast('فشل إرسال الصورة للمراجعة.');
           console.error('send failed', j);
         }
       } catch (err){
@@ -471,4 +460,3 @@
   </script>
 </body>
 </html>
-
