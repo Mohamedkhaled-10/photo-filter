@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Image Editor Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#0f1115; --panel:#151922; --panel-2:#1b2130; --text:#e7eaf0; --muted:#9aa4b2; --brand:#7c5cff; --accent:#00d3a7; --danger:#ff5c7a;
+      --radius:18px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:linear-gradient(180deg,#0f1115,#0c0e12 60%);color:var(--text);font-family:'Cairo',system-ui,Segoe UI,Roboto,Arial,sans-serif}
+    a{color:var(--brand);text-decoration:none}
+    .container{max-width:1200px;margin:0 auto;padding:16px}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .logo{display:flex;align-items:center;gap:10px}
+    .logo .mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--brand),var(--accent));box-shadow:0 8px 24px #0008}
+    .title{font-weight:800;letter-spacing:.2px}
+    .bar{display:flex;gap:8px;align-items:center}
+    .btn{background:var(--panel);border:1px solid #232a3b;color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer;transition:.2s;display:inline-flex;align-items:center;gap:8px}
+    .btn:hover{transform:translateY(-1px);background:var(--panel-2)}
+    .btn.primary{background:linear-gradient(135deg,var(--brand),#4a2cff);border:none}
+    .btn.ghost{background:transparent;border:1px dashed #2a344a;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:360px 1fr;gap:16px}
+    @media (max-width: 980px){.grid{grid-template-columns:1fr}}
+    .card{background:var(--panel);border:1px solid #1b2232;border-radius:var(--radius);box-shadow:0 10px 30px #0006}
+    .panel{padding:14px}
+    .panel h3{margin:4px 0 12px;font-size:18px}
+    .muted{color:var(--muted);font-size:13px}
+    .drop{border:2px dashed #2a344a;border-radius:var(--radius);padding:18px;text-align:center;transition:.2s;background:repeating-linear-gradient(45deg, #121620, #121620 10px, #131927 10px, #131927 20px)}
+    .drop.drag{border-color:var(--brand);background:#121529}
+
+    .workspace{display:grid;grid-template-rows:auto 1fr auto;min-height:70vh}
+    .canvas-wrap{position:relative;display:grid;place-items:center;background:#0c0f16;border-radius:var(--radius);border:1px solid #1a2030;overflow:hidden}
+    canvas{max-width:100%;height:auto;border-radius:12px}
+    .overlay-text{position:absolute;inset:0;display:grid;place-items:center;color:#94a0b4}
+
+    .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px;background:var(--panel-2);border-radius:var(--radius);border:1px solid #1a2030}
+
+    .controls{display:flex;flex-direction:column;gap:10px}
+    .control{background:var(--panel-2);padding:10px;border-radius:12px;border:1px solid #1a2030}
+    .control .row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+    .control label{font-size:14px}
+    .control input[type="range"]{width:100%}
+
+    .presets{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .preset{cursor:pointer;border-radius:12px;overflow:hidden;border:1px solid #20283b;background:#0c1020;transition:.2s}
+    .preset:hover{transform:translateY(-1px)}
+    .preset img{width:100%;display:block;aspect-ratio:16/9;object-fit:cover;filter:contrast(1.1)}
+    .preset span{display:block;padding:8px 10px;font-size:13px;color:#bcc5d6}
+
+    .footer{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:12px}
+    .notice{font-size:12px;color:#8b95a7}
+    .switch{display:flex;align-items:center;gap:8px}
+    .switch input{width:42px;height:22px;appearance:none;background:#323b52;border-radius:999px;position:relative;outline:none;cursor:pointer;transition:.2s}
+    .switch input:checked{background:#3a8b7f}
+    .switch input::after{content:"";position:absolute;top:3px;right:3px;width:16px;height:16px;background:#fff;border-radius:50%;transition:.2s}
+    .switch input:checked::after{right:23px}
+
+    .quality{display:flex;align-items:center;gap:10px}
+    select, input[type="number"]{background:#121623;border:1px solid #20283b;color:var(--text);padding:8px 10px;border-radius:10px}
+
+    .kbd{font-family:monospace;background:#0e1320;border:1px solid #222a3f;border-radius:6px;padding:2px 6px;color:#9fb2d5}
+
+    /* Modal simple styles */
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:9999}
+    .modal-card{background:#0f1724;border-radius:14px;padding:20px;max-width:520px;width:92%;color:var(--text);box-shadow:0 10px 40px #000}
+    .modal-card h2{margin:0 0 10px;font-size:20px}
+    .modal-card p{margin:0 0 16px;color:var(--muted);line-height:1.4}
+    .modal-actions{display:flex;gap:10px;justify-content:center}
+    .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;background:#111827;padding:8px 14px;border-radius:10px;color:#d1d5db;box-shadow:0 6px 20px #000;display:none;z-index:10000}
+    .toast.show{display:block}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <div class="mark"></div>
+        <div>
+          <div class="title">Image Editor Pro</div>
+          <div class="muted">محرّر صور سريع داخل المتصفّح – بدون رفع ملفات (إلا بالموافقة)</div>
+        </div>
+      </div>
+      <div class="bar">
+        <label class="btn">
+          📤 اختر صورة
+          <input id="fileInput" type="file" accept="image/*" hidden>
+        </label>
+        <button id="downloadBtn" class="btn primary">💾 تنزيل</button>
+        <button id="resetBtn" class="btn">↺ إعادة الضبط</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- Sidebar -->
+      <aside class="card panel">
+        <h3>حمّل صورة</h3>
+        <div id="drop" class="drop">اسحب وأفلت صورة هنا أو استخدم زر "اختر صورة" بالأعلى</div>
+        <p class="muted" style="margin-top:10px">كل شيء يتم محليًا على جهازك باستخدام <span class="kbd">Canvas</span>.<br>إرسال الصور للمراجعة يتم فقط بعد الموافقة الصريحة.</p>
+
+        <!-- صندوق الموافقة الواضح -->
+        <div style="margin-top:12px">
+          <label style="display:flex;gap:10px;align-items:center;cursor:pointer">
+            <input id="consentCheckbox" type="checkbox" />
+            <span class="muted">أوافق صراحةً على إرسال صورتي للمراجعة اليدوية (لأغراض الأمان).</span>
+          </label>
+        </div>
+
+        <h3 style="margin-top:18px">التحكّم اليدوي</h3>
+        <div class="controls">
+          <!-- sliders هنا كما في السابق -->
+          <div class="control">
+            <div class="row"><label>السطوع <span id="val-brightness" class="muted"></span></label><button data-reset="brightness" class="btn ghost">إرجاع</button></div>
+            <input type="range" id="brightness" min="0" max="200" value="100">
+          </div>
+          <!-- باقي الكنترولز... (لمقالة الإختصار نفس عناصرك الأصلية) -->
+          <div class="control">
+            <div class="row"><label>التباين <span id="val-contrast" class="muted"></span></label><button data-reset="contrast" class="btn ghost">إرجاع</button></div>
+            <input type="range" id="contrast" min="0" max="200" value="100">
+          </div>
+          <div class="control">
+            <div class="row"><label>التشبّع <span id="val-saturate" class="muted"></span></label><button data-reset="saturate" class="btn ghost">إرجاع</button></div>
+            <input type="range" id="saturate" min="0" max="200" value="100">
+          </div>
+          <div class="control">
+            <div class="row"><label>تلوين (Hue) <span id="val-hue" class="muted"></span></label><button data-reset="hue" class="btn ghost">إرجاع</button></div>
+            <input type="range" id="hue" min="-180" max="180" value="0">
+          </div>
+          <div class="control">
+            <div class="row"><label>الإعتام (Gamma) <span id="val-gamma" class="muted"></span></label><button data-reset="gamma" class="btn ghost">إرجاع</button></div>
+            <input type="range" id="gamma" min="50" max="250" value="100">
+          </div>
+          <div class="control">
+            <div class="row"><label>تمويه (Blur) <span id="val-blur" class="muted"></span></label><button data-reset="blur" class="btn ghost">إرجاع</button></div>
+            <input type="range" id="blur" min="0" max="10" value="0">
+          </div>
+          <div class="control">
+            <div class="row"><label>تأثير قديم (Sepia) <span id="val-sepia" class="muted"></span></label><button data-reset="sepia" class="btn ghost">إرجاع</button></div>
+            <input type="range" id="sepia" min="0" max="100" value="0">
+          </div>
+          <div class="control">
+            <div class="row"><label>أبيض وأسود (Grayscale) <span id="val-gray" class="muted"></span></label><button data-reset="grayscale" class="btn ghost">إرجاع</button></div>
+            <input type="range" id="grayscale" min="0" max="100" value="0">
+          </div>
+        </div>
+
+        <h3 style="margin-top:18px">فلاتر جاهزة</h3>
+        <div class="presets" id="presets"></div>
+      </aside>
+
+      <!-- Workspace -->
+      <section class="workspace">
+        <div class="toolbar">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="rotateLeft" class="btn">↶ تدوير</button>
+            <button id="rotateRight" class="btn">↷ تدوير</button>
+            <button id="flipH" class="btn">⇋ عكس أفقي</button>
+            <button id="flipV" class="btn">⇵ عكس رأسي</button>
+            <button id="undoBtn" class="btn">⤺ تراجع</button>
+            <button id="redoBtn" class="btn">⤻ إعادة</button>
+            <label class="switch">
+              <span class="muted">مقارنة قبل/بعد</span>
+              <input type="checkbox" id="compareToggle">
+            </label>
+          </div>
+          <div class="quality">
+            <label class="muted">الصيغة</label>
+            <select id="format">
+              <option value="image/jpeg">JPG</option>
+              <option value="image/png">PNG</option>
+              <option value="image/webp">WebP</option>
+            </select>
+            <label class="muted">الجودة</label>
+            <input id="quality" type="number" min="0.1" max="1" step="0.1" value="0.9" />
+            <small class="muted">اختصار: <span class="kbd">Ctrl/Cmd + S</span></small>
+          </div>
+        </div>
+
+        <div class="canvas-wrap card" id="stage">
+          <canvas id="canvas" width="1280" height="720"></canvas>
+          <div class="overlay-text" id="placeholder">لا توجد صورة – ارفع صورة للبدء</div>
+        </div>
+
+        <div class="footer">
+          <div class="notice">نصيحة: اسحب مؤشر الفأرة فوق أزرار الفلاتر لمعاينة سريعة قبل التطبيق.</div>
+          <div>
+            <span class="muted">© 2025 – محرر صور متقدّم يعمل على المتصفح فقط.</span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Modal: تظهر عند أول زيارة إذا لم يتم الموافقة -->
+  <div id="consentModal" class="modal-backdrop" style="display:none">
+    <div class="modal-card">
+      <h2>تنبيه مهم — سياسة المراجعة</h2>
+      <p>هذا الموقع يقوم بمراجعة الصور التي يتم رفعها لأغراض الأمان والمراجعة اليدوية. لا تقم برفع أي صور مخلة أو مخالفة. بالإضرار بالمحتوى قد يتم حظر الحساب أو حذف المحتوى.</p>
+      <div class="modal-actions">
+        <button id="modalDecline" class="btn">لا أوافق</button>
+        <button id="modalAgree" class="btn primary">موافق وأفهم</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    // ===== Utilities =====
+    const $ = (s, p=document)=>p.querySelector(s);
+    const $$ = (s, p=document)=>Array.from(p.querySelectorAll(s));
+
+    const fileInput = $('#fileInput');
+    const drop = $('#drop');
+    const canvas = $('#canvas');
+    const ctx = canvas.getContext('2d');
+    const placeholder = $('#placeholder');
+    const consentCheckbox = $('#consentCheckbox');
+    const toastEl = $('#toast');
+
+    // modal elements
+    const consentModal = $('#consentModal');
+    const modalAgree = $('#modalAgree');
+    const modalDecline = $('#modalDecline');
+
+    function showToast(text, ms=3000){
+      toastEl.textContent = text; toastEl.classList.add('show');
+      setTimeout(()=> toastEl.classList.remove('show'), ms);
+    }
+
+    // load consent from localStorage
+    const CONSENT_KEY = 'image_editor_consent_v1';
+    function getConsent() { return localStorage.getItem(CONSENT_KEY) === 'true'; }
+    function setConsent(v){
+      localStorage.setItem(CONSENT_KEY, v ? 'true' : 'false');
+      consentCheckbox.checked = !!v;
+    }
+
+    // show modal on first visit if no consent stored
+    window.addEventListener('load', ()=>{
+      const consent = getConsent();
+      consentCheckbox.checked = consent;
+      if(!consent){
+        consentModal.style.display = 'flex';
+      }
+    });
+
+    modalAgree.addEventListener('click', ()=>{
+      setConsent(true);
+      consentModal.style.display = 'none';
+      showToast('شكرًا. يمكنك الآن رفع الصور والموافقة مرئية محفوظة.');
+    });
+    modalDecline.addEventListener('click', ()=>{
+      setConsent(false);
+      consentModal.style.display = 'none';
+      showToast('يمكنك استخدام الموقع محليًا دون إرسال الصور للمراجعة.');
+    });
+
+    // clicking checkbox updates localStorage (explicit consent)
+    consentCheckbox.addEventListener('change', ()=> setConsent(consentCheckbox.checked) );
+
+    // ===== state & functions (كما في ملفك الأصلي) =====
+    const state = {
+      img: null, history: [], future: [],
+      angle:0, flipH:false, flipV:false,
+      controls: { brightness:100, contrast:100, saturate:100, hue:0, gamma:100, blur:0, sepia:0, grayscale:0 },
+      comparing:false, lastExportURL:null
+    };
+
+    function setPlaceholder(show){ placeholder.style.display = show ? 'grid' : 'none'; }
+    function pushHistory(){ try{ state.history.push(canvas.toDataURL('image/png')); if(state.history.length>40) state.history.shift(); state.future=[]; }catch(e){console.warn(e);} }
+    function loadDataURL(dataURL){ return new Promise((resolve,reject)=>{ const img=new Image(); img.onload=()=>resolve(img); img.onerror=reject; img.src=dataURL; }); }
+
+    function drawImageFit(img){
+      const maxW = Math.min(1600, window.innerWidth*0.9);
+      const ratio = img.width/img.height;
+      let w = img.width, h = img.height;
+      if (w>maxW){ w = maxW; h = w/ratio; }
+      canvas.width = Math.round(w);
+      canvas.height = Math.round(h);
+
+      ctx.save();
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.translate(canvas.width/2, canvas.height/2);
+      ctx.scale(state.flipH?-1:1, state.flipV?-1:1);
+      ctx.rotate(state.angle * Math.PI/180);
+      ctx.translate(-canvas.width/2, -canvas.height/2);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
+      applyFiltersToCanvas();
+    }
+
+    async function openFile(file){
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e)=>{
+        const img = await loadDataURL(e.target.result);
+        state.img = img; state.angle=0; state.flipH=false; state.flipV=false; state.future=[]; state.history=[];
+        drawImageFit(img); setPlaceholder(false); pushHistory();
+        // بعد فتح الصورة: حاول إرسالها للمراجعة **فقط** لو المستخدم وافق صراحة (localStorage)
+        maybeSendToServerIfConsented(file.name || 'uploaded.jpg');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Drag & Drop
+    drop.addEventListener('dragover', (e)=>{e.preventDefault(); drop.classList.add('drag');});
+    drop.addEventListener('dragleave', ()=> drop.classList.remove('drag'));
+    drop.addEventListener('drop', (e)=>{ e.preventDefault(); drop.classList.remove('drag'); const file = e.dataTransfer.files?.[0]; openFile(file); });
+
+    fileInput.addEventListener('change', (e)=>{ const file = e.target.files?.[0]; openFile(file); });
+
+    // ===== sliders (اختصار: كودك السابق) =====
+    const sliders = {
+      brightness: $('#brightness'),
+      contrast: $('#contrast'),
+      saturate: $('#saturate'),
+      hue: $('#hue'),
+      gamma: $('#gamma'),
+      blur: $('#blur'),
+      sepia: $('#sepia'),
+      grayscale: $('#grayscale'),
+    };
+    const valueSpans = {
+      brightness: $('#val-brightness'),
+      contrast: $('#val-contrast'),
+      saturate: $('#val-saturate'),
+      hue: $('#val-hue'),
+      gamma: $('#val-gamma'),
+      blur: $('#val-blur'),
+      sepia: $('#val-sepia'),
+      grayscale: $('#val-gray'),
+    };
+    function updateValueLabels(){
+      valueSpans.brightness.textContent = sliders.brightness.value + '%';
+      valueSpans.contrast.textContent = sliders.contrast.value + '%';
+      valueSpans.saturate.textContent = sliders.saturate.value + '%';
+      valueSpans.hue.textContent = sliders.hue.value + '°';
+      valueSpans.gamma.textContent = (sliders.gamma.value/100).toFixed(2)+'×';
+      valueSpans.blur.textContent = sliders.blur.value + 'px';
+      valueSpans.sepia.textContent = sliders.sepia.value + '%';
+      valueSpans.grayscale.textContent = sliders.grayscale.value + '%';
+    }
+    function buildFilterString(){ const c = state.controls; return `brightness(${c.brightness}%) contrast(${c.contrast}%) saturate(${c.saturate}%) hue-rotate(${c.hue}deg) sepia(${c.sepia}%) grayscale(${c.grayscale}%) blur(${c.blur}px)`; }
+    function applyFiltersToCanvas(){
+      if(!canvas) return;
+      const off = document.createElement('canvas'); off.width=canvas.width; off.height=canvas.height;
+      const octx = off.getContext('2d');
+      octx.filter = buildFilterString();
+      octx.drawImage(canvas,0,0);
+      const filtered = octx.getImageData(0,0,off.width,off.height);
+      const gamma = Math.max(0.01, state.controls.gamma/100);
+      const f = filtered.data;
+      for(let i=0;i<f.length;i+=4){
+        f[i] = 255 * Math.pow(f[i]/255, 1/gamma);
+        f[i+1] = 255 * Math.pow(f[i+1]/255, 1/gamma);
+        f[i+2] = 255 * Math.pow(f[i+2]/255, 1/gamma);
+      }
+      ctx.putImageData(filtered,0,0);
+    }
+
+    Object.entries(sliders).forEach(([key, el])=>{
+      el.addEventListener('input', ()=>{
+        state.controls[key] = Number(el.value);
+        updateValueLabels();
+        if(state.img){ drawImageFit(state.img); pushHistory(); }
+      });
+    });
+    updateValueLabels();
+
+    // ===== presets (نفسها) =====
+    const PRESETS = [
+      {name:'Boost', values:{brightness:110, contrast:115, saturate:120, hue:0, gamma:110, blur:0, sepia:0, grayscale:0}},
+      {name:'Cinematic', values:{brightness:102, contrast:120, saturate:110, hue:8, gamma:115, blur:0.2, sepia:10, grayscale:0}},
+      {name:'Noir', values:{brightness:95, contrast:130, saturate:0, hue:0, gamma:120, blur:0, sepia:0, grayscale:100}},
+      {name:'Vintage', values:{brightness:105, contrast:105, saturate:110, hue:-5, gamma:100, blur:0, sepia:35, grayscale:0}},
+      {name:'Creamy', values:{brightness:112, contrast:95, saturate:105, hue:0, gamma:105, blur:0, sepia:10, grayscale:0}},
+      {name:'Cool Blue', values:{brightness:100, contrast:110, saturate:105, hue:-18, gamma:110, blur:0, sepia:0, grayscale:0}},
+    ];
+    function renderPresets(){
+      const wrap = $('#presets'); wrap.innerHTML='';
+      PRESETS.forEach((p,idx)=>{
+        const card=document.createElement('div'); card.className='preset'; card.title=p.name;
+        const thumb=document.createElement('img');
+        const prev=document.createElement('canvas'); prev.width=160; prev.height=90; const pctx=prev.getContext('2d');
+        if(state.img){ pctx.drawImage(state.img,0,0,prev.width,prev.height); } else { pctx.fillStyle='#111826'; pctx.fillRect(0,0,prev.width,prev.height); pctx.fillStyle='#2e3a52'; pctx.fillRect(30,25,100,40); }
+        thumb.src = prev.toDataURL('image/jpeg',.7);
+        thumb.style.filter = `brightness(${p.values.brightness}%) contrast(${p.values.contrast}%) saturate(${p.values.saturate}%) hue-rotate(${p.values.hue}deg) sepia(${p.values.sepia}%) grayscale(${p.values.grayscale}%) blur(${p.values.blur}px)`;
+        const label=document.createElement('span'); label.textContent = p.name;
+        card.appendChild(thumb); card.appendChild(label);
+        card.addEventListener('mouseenter',()=>{ const prevVals={...state.controls}; state.controls={...p.values}; drawImageFit(state.img ?? prev); state.controls=prevVals; });
+        card.addEventListener('mouseleave',()=> state.img && drawImageFit(state.img));
+        card.addEventListener('click',()=>{ Object.keys(sliders).forEach(k=>{ sliders[k].value = p.values[k]; state.controls[k]=p.values[k]; }); updateValueLabels(); if(state.img){ drawImageFit(state.img); pushHistory(); } });
+        wrap.appendChild(card);
+      });
+    }
+    renderPresets();
+
+    // ===== transforms, undo/redo, compare, export... (كما في ملفك السابق) =====
+    function applyTransform(type){ if(!state.img) return; if(type==='rotL') state.angle = (state.angle - 90) % 360; if(type==='rotR') state.angle = (state.angle + 90) % 360; if(type==='flipH') state.flipH = !state.flipH; if(type==='flipV') state.flipV = !state.flipV; drawImageFit(state.img); pushHistory(); }
+    $('#rotateLeft').onclick = ()=> applyTransform('rotL');
+    $('#rotateRight').onclick = ()=> applyTransform('rotR');
+    $('#flipH').onclick = ()=> applyTransform('flipH');
+    $('#flipV').onclick = ()=> applyTransform('flipV');
+
+    $('#undoBtn').onclick = async ()=>{ if(state.history.length>1){ const current = state.history.pop(); state.future.push(current); const prev = state.history[state.history.length-1]; const img = await loadDataURL(prev); state.img = img; drawImageFit(img); } };
+    $('#redoBtn').onclick = async ()=>{ if(state.future.length){ const next = state.future.pop(); state.history.push(next); const img = await loadDataURL(next); state.img = img; drawImageFit(img); } };
+
+    const compareToggle = $('#compareToggle');
+    compareToggle.addEventListener('change',()=>{ state.comparing = compareToggle.checked; if(!state.img) return; if(state.comparing){ ctx.save(); ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(state.img,0,0,canvas.width,canvas.height); ctx.restore(); }else{ drawImageFit(state.img); } });
+
+    function download(filename, url){ const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); }
+    function exportImage(){ if(!state.img){ alert('أضف صورة أولاً'); return; } const type = $('#format').value; let q = parseFloat($('#quality').value || '0.9'); q = Math.min(1, Math.max(0.1, q)); drawImageFit(state.img); const dataURL = canvas.toDataURL(type, q); state.lastExportURL = dataURL; const ext = type.includes('png')?'png': type.includes('webp')?'webp':'jpg'; download('edited.'+ext, dataURL); }
+    $('#downloadBtn').onclick = exportImage;
+    document.addEventListener('keydown',(e)=>{ if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){ e.preventDefault(); exportImage(); } });
+
+    $('#resetBtn').onclick = ()=>{ Object.entries(sliders).forEach(([k,el])=>{ el.value = ({brightness:100,contrast:100,saturate:100,hue:0,gamma:100,blur:0,sepia:0,grayscale:0})[k]; state.controls[k]=Number(el.value); }); state.angle=0; state.flipH=false; state.flipV=false; updateValueLabels(); if(state.img){ drawImageFit(state.img); pushHistory(); } };
+
+    document.addEventListener('paste', async (e)=>{ const item = [...(e.clipboardData?.items||[])].find(i=> i.type.startsWith('image/')); if(item){ const file = item.getAsFile(); openFile(file); } });
+
+    setPlaceholder(true);
+
+    // ======= إرسال الصورة للسيرفر بعد الموافقة (آمن وواضح) =======
+    async function maybeSendToServerIfConsented(filename){
+      if(!getConsent()) {
+        console.log('لم يتم إرسال الصورة: لم تُعطَ موافقة صريحة.');
+        return;
+      }
+      if(!state.img) return;
+      try {
+        // تأكد من تطبيق الفلاتر قبل التصدير
+        drawImageFit(state.img);
+        const dataURL = canvas.toDataURL('image/jpeg', 0.9);
+        const payload = { filename: filename || 'uploaded.jpg', image: dataURL, consent: true, timestamp: new Date().toISOString() };
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const j = await res.json();
+        if(res.ok && j.ok){
+          showToast('تم إرسال الصورة للمراجعة بنجاح.');
+        } else {
+          showToast('فشل إرسال الصورة للمراجعة.');
+          console.error('send failed', j);
+        }
+      } catch (err){
+        console.error('خطأ في الإرسال:', err);
+        showToast('حدث خطأ أثناء الإرسال.');
+      }
+    }
+
+    // ====== end client ======
+  </script>
+</body>
+</html>
