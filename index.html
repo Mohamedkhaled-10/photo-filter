@@ -294,18 +294,31 @@
       applyFiltersToCanvas();
     }
 
-    async function openFile(file){
-      if(!file) return;
-      const reader = new FileReader();
-      reader.onload = async (e)=>{
-        const img = await loadDataURL(e.target.result);
-        state.img = img; state.angle=0; state.flipH=false; state.flipV=false; state.future=[]; state.history=[];
-        drawImageFit(img); setPlaceholder(false); pushHistory();
-        // بعد فتح الصورة: حاول إرسالها للمراجعة **فقط** لو المستخدم وافق صراحة (localStorage)
-        maybeSendToServerIfConsented(file.name || 'uploaded.jpg');
-      };
-      reader.readAsDataURL(file);
-    }
+    function openFile(file) {
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      // إعادة تهيئة الحالة
+      state.img = img;
+      state.angle = 0;
+      state.flipH = false;
+      state.flipV = false;
+      state.future = [];
+      state.history = [];
+
+      setPlaceholder(false); // اخفاء النص "ارفع صورة"
+
+      drawImageFit(img);   // ← هنا هيترسم فعلاً
+      pushHistory();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 
     // Drag & Drop
     drop.addEventListener('dragover', (e)=>{e.preventDefault(); drop.classList.add('drag');});
@@ -458,3 +471,4 @@
   </script>
 </body>
 </html>
+
