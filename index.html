@@ -211,265 +211,363 @@
 
   <div id="toast" class="toast"></div>
 
-  <script>
-    // ===== Utilities =====
-    const $ = (s, p=document)=>p.querySelector(s);
-    const $$ = (s, p=document)=>Array.from(p.querySelectorAll(s));
+  <!-- احتفظ بنفس رأس الملف وCSS — سأعرض هنا قسم الـ <script> بالكامل (استبدل السكربت القديم بالآتي) -->
+<script>
+  // ===== Utilities =====
+  const $ = (s, p=document)=>p.querySelector(s);
+  const $$ = (s, p=document)=>Array.from(p.querySelectorAll(s));
 
-    const fileInput = $('#fileInput');
-    const drop = $('#drop');
-    const canvas = $('#canvas');
-    const ctx = canvas.getContext('2d');
-    const placeholder = $('#placeholder');
-    const consentCheckbox = $('#consentCheckbox');
-    const toastEl = $('#toast');
+  const fileInput = $('#fileInput');
+  const drop = $('#drop');
+  const canvas = $('#canvas');
+  const ctx = canvas.getContext('2d');
+  const placeholder = $('#placeholder');
+  const consentCheckbox = $('#consentCheckbox');
+  const toastEl = $('#toast');
 
-    // modal elements
-    const consentModal = $('#consentModal');
-    const modalAgree = $('#modalAgree');
-    const modalDecline = $('#modalDecline');
+  const consentModal = $('#consentModal');
+  const modalAgree = $('#modalAgree');
+  const modalDecline = $('#modalDecline');
 
-    function showToast(text, ms=3000){
-      toastEl.textContent = text; toastEl.classList.add('show');
-      setTimeout(()=> toastEl.classList.remove('show'), ms);
+  function showToast(text, ms=3000){
+    toastEl.textContent = text; toastEl.classList.add('show');
+    setTimeout(()=> toastEl.classList.remove('show'), ms);
+  }
+
+  // consent in localStorage
+  const CONSENT_KEY = 'image_editor_consent_v1';
+  function getConsent() { return localStorage.getItem(CONSENT_KEY) === 'true'; }
+  function setConsent(v){
+    localStorage.setItem(CONSENT_KEY, v ? 'true' : 'false');
+    consentCheckbox.checked = !!v;
+  }
+
+  window.addEventListener('load', ()=>{
+    const consent = getConsent();
+    consentCheckbox.checked = consent;
+    if(!consent){
+      consentModal.style.display = 'flex';
     }
+  });
 
-    // load consent from localStorage
-    const CONSENT_KEY = 'image_editor_consent_v1';
-    function getConsent() { return localStorage.getItem(CONSENT_KEY) === 'true'; }
-    function setConsent(v){
-      localStorage.setItem(CONSENT_KEY, v ? 'true' : 'false');
-      consentCheckbox.checked = !!v;
-    }
+  modalAgree.addEventListener('click', ()=>{
+    setConsent(true);
+    consentModal.style.display = 'none';
+    showToast('شكرًا. يمكنك الآن رفع الصور والموافقة مرئية محفوظة.');
+  });
+  modalDecline.addEventListener('click', ()=>{
+    setConsent(false);
+    consentModal.style.display = 'none';
+    showToast('يمكنك استخدام الموقع محليًا دون إرسال الصور للمراجعة.');
+  });
+  consentCheckbox.addEventListener('change', ()=> setConsent(consentCheckbox.checked) );
 
-    // show modal on first visit if no consent stored
-    window.addEventListener('load', ()=>{
-      const consent = getConsent();
-      consentCheckbox.checked = consent;
-      if(!consent){
-        consentModal.style.display = 'flex';
-      }
-    });
+  // ===== state & helpers =====
+  const state = {
+    img: null, history: [], future: [],
+    angle:0, flipH:false, flipV:false,
+    controls: { brightness:100, contrast:100, saturate:100, hue:0, gamma:100, blur:0, sepia:0, grayscale:0 },
+    comparing:false, lastExportURL:null
+  };
 
-    modalAgree.addEventListener('click', ()=>{
-      setConsent(true);
-      consentModal.style.display = 'none';
-      showToast('شكرًا. يمكنك الآن رفع الصور والموافقة مرئية محفوظة.');
-    });
-    modalDecline.addEventListener('click', ()=>{
-      setConsent(false);
-      consentModal.style.display = 'none';
-      showToast('يمكنك استخدام الموقع محليًا دون إرسال الصور للمراجعة.');
-    });
+  function setPlaceholder(show){ placeholder.style.display = show ? 'grid' : 'none'; }
+  function pushHistory(){
+    try{
+      state.history.push(canvas.toDataURL('image/png'));
+      if(state.history.length>40) state.history.shift();
+      state.future=[];
+    }catch(e){ console.warn('pushHistory error', e); }
+  }
+  function loadDataURL(dataURL){ return new Promise((resolve,reject)=>{ const img=new Image(); img.onload=()=>resolve(img); img.onerror=reject; img.src=dataURL; }); }
 
-    // clicking checkbox updates localStorage (explicit consent)
-    consentCheckbox.addEventListener('change', ()=> setConsent(consentCheckbox.checked) );
+  // ===== improved drawImageFit (handles rotation 90/270 & flipping correctly) =====
+  function drawImageFit(img){
+    if(!img) return;
+    const maxW = Math.min(1600, window.innerWidth*0.9);
+    // choose base width (no rotation)
+    const baseWidth = Math.min(img.width, maxW);
+    const baseHeight = Math.round(baseWidth / (img.width / img.height));
+    canvas.width = Math.round(baseWidth);
+    canvas.height = Math.round(baseHeight);
 
-    // ===== state & functions (كما في ملفك الأصلي) =====
-    const state = {
-      img: null, history: [], future: [],
-      angle:0, flipH:false, flipV:false,
-      controls: { brightness:100, contrast:100, saturate:100, hue:0, gamma:100, blur:0, sepia:0, grayscale:0 },
-      comparing:false, lastExportURL:null
-    };
+    ctx.save();
+    ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    function setPlaceholder(show){ placeholder.style.display = show ? 'grid' : 'none'; }
-    function pushHistory(){ try{ state.history.push(canvas.toDataURL('image/png')); if(state.history.length>40) state.history.shift(); state.future=[]; }catch(e){console.warn(e);} }
-    function loadDataURL(dataURL){ return new Promise((resolve,reject)=>{ const img=new Image(); img.onload=()=>resolve(img); img.onerror=reject; img.src=dataURL; }); }
+    // normalized angle (0..359)
+    const angleNorm = ((state.angle % 360) + 360) % 360;
+    const angleRad = angleNorm * Math.PI / 180;
+    const rotated = angleNorm === 90 || angleNorm === 270;
 
-    function drawImageFit(img){
-      const maxW = Math.min(1600, window.innerWidth*0.9);
-      const ratio = img.width/img.height;
-      let w = img.width, h = img.height;
-      if (w>maxW){ w = maxW; h = w/ratio; }
-      canvas.width = Math.round(w);
-      canvas.height = Math.round(h);
+    // compute scale depending on rotation
+    const scale = rotated
+      ? Math.min(canvas.width / img.height, canvas.height / img.width)
+      : Math.min(canvas.width / img.width, canvas.height / img.height);
 
-      ctx.save();
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      ctx.translate(canvas.width/2, canvas.height/2);
-      ctx.scale(state.flipH?-1:1, state.flipV?-1:1);
-      ctx.rotate(state.angle * Math.PI/180);
-      ctx.translate(-canvas.width/2, -canvas.height/2);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      ctx.restore();
-      applyFiltersToCanvas();
-    }
+    const drawW = img.width * scale;
+    const drawH = img.height * scale;
 
-    async function openFile(file){
-      if(!file) return;
-      const reader = new FileReader();
-      reader.onload = async (e)=>{
+    // draw centered with transforms
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.scale(state.flipH ? -1 : 1, state.flipV ? -1 : 1);
+    ctx.rotate(angleRad);
+    ctx.drawImage(img, -drawW/2, -drawH/2, drawW, drawH);
+    ctx.restore();
+
+    applyFiltersToCanvas();
+  }
+
+  async function openFile(file){
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e)=>{
+      try{
         const img = await loadDataURL(e.target.result);
         state.img = img; state.angle=0; state.flipH=false; state.flipV=false; state.future=[]; state.history=[];
         drawImageFit(img); setPlaceholder(false); pushHistory();
         // بعد فتح الصورة: حاول إرسالها للمراجعة **فقط** لو المستخدم وافق صراحة (localStorage)
         maybeSendToServerIfConsented(file.name || 'uploaded.jpg');
-      };
-      reader.readAsDataURL(file);
-    }
-
-    // Drag & Drop
-    drop.addEventListener('dragover', (e)=>{e.preventDefault(); drop.classList.add('drag');});
-    drop.addEventListener('dragleave', ()=> drop.classList.remove('drag'));
-    drop.addEventListener('drop', (e)=>{ e.preventDefault(); drop.classList.remove('drag'); const file = e.dataTransfer.files?.[0]; openFile(file); });
-
-    fileInput.addEventListener('change', (e)=>{ const file = e.target.files?.[0]; openFile(file); });
-
-    // ===== sliders (اختصار: كودك السابق) =====
-    const sliders = {
-      brightness: $('#brightness'),
-      contrast: $('#contrast'),
-      saturate: $('#saturate'),
-      hue: $('#hue'),
-      gamma: $('#gamma'),
-      blur: $('#blur'),
-      sepia: $('#sepia'),
-      grayscale: $('#grayscale'),
-    };
-    const valueSpans = {
-      brightness: $('#val-brightness'),
-      contrast: $('#val-contrast'),
-      saturate: $('#val-saturate'),
-      hue: $('#val-hue'),
-      gamma: $('#val-gamma'),
-      blur: $('#val-blur'),
-      sepia: $('#val-sepia'),
-      grayscale: $('#val-gray'),
-    };
-    function updateValueLabels(){
-      valueSpans.brightness.textContent = sliders.brightness.value + '%';
-      valueSpans.contrast.textContent = sliders.contrast.value + '%';
-      valueSpans.saturate.textContent = sliders.saturate.value + '%';
-      valueSpans.hue.textContent = sliders.hue.value + '°';
-      valueSpans.gamma.textContent = (sliders.gamma.value/100).toFixed(2)+'×';
-      valueSpans.blur.textContent = sliders.blur.value + 'px';
-      valueSpans.sepia.textContent = sliders.sepia.value + '%';
-      valueSpans.grayscale.textContent = sliders.grayscale.value + '%';
-    }
-    function buildFilterString(){ const c = state.controls; return `brightness(${c.brightness}%) contrast(${c.contrast}%) saturate(${c.saturate}%) hue-rotate(${c.hue}deg) sepia(${c.sepia}%) grayscale(${c.grayscale}%) blur(${c.blur}px)`; }
-    function applyFiltersToCanvas(){
-      if(!canvas) return;
-      const off = document.createElement('canvas'); off.width=canvas.width; off.height=canvas.height;
-      const octx = off.getContext('2d');
-      octx.filter = buildFilterString();
-      octx.drawImage(canvas,0,0);
-      const filtered = octx.getImageData(0,0,off.width,off.height);
-      const gamma = Math.max(0.01, state.controls.gamma/100);
-      const f = filtered.data;
-      for(let i=0;i<f.length;i+=4){
-        f[i] = 255 * Math.pow(f[i]/255, 1/gamma);
-        f[i+1] = 255 * Math.pow(f[i+1]/255, 1/gamma);
-        f[i+2] = 255 * Math.pow(f[i+2]/255, 1/gamma);
+      }catch(err){
+        console.error('openFile error', err);
+        showToast('فشل في تحميل الصورة.');
       }
-      ctx.putImageData(filtered,0,0);
-    }
+    };
+    reader.readAsDataURL(file);
+  }
 
-    Object.entries(sliders).forEach(([key, el])=>{
-      el.addEventListener('input', ()=>{
-        state.controls[key] = Number(el.value);
+  // Drag & Drop
+  drop.addEventListener('dragover', (e)=>{e.preventDefault(); drop.classList.add('drag');});
+  drop.addEventListener('dragleave', ()=> drop.classList.remove('drag'));
+  drop.addEventListener('drop', (e)=>{ e.preventDefault(); drop.classList.remove('drag'); const file = e.dataTransfer.files?.[0]; openFile(file); });
+
+  fileInput.addEventListener('change', (e)=>{ const file = e.target.files?.[0]; openFile(file); });
+
+  // ===== sliders setup (live preview on input; push history on change only) =====
+  const sliders = {
+    brightness: $('#brightness'),
+    contrast: $('#contrast'),
+    saturate: $('#saturate'),
+    hue: $('#hue'),
+    gamma: $('#gamma'),
+    blur: $('#blur'),
+    sepia: $('#sepia'),
+    grayscale: $('#grayscale'),
+  };
+  const valueSpans = {
+    brightness: $('#val-brightness'),
+    contrast: $('#val-contrast'),
+    saturate: $('#val-saturate'),
+    hue: $('#val-hue'),
+    gamma: $('#val-gamma'),
+    blur: $('#val-blur'),
+    sepia: $('#val-sepia'),
+    grayscale: $('#val-gray'),
+  };
+
+  function updateValueLabels(){
+    valueSpans.brightness.textContent = sliders.brightness.value + '%';
+    valueSpans.contrast.textContent = sliders.contrast.value + '%';
+    valueSpans.saturate.textContent = sliders.saturate.value + '%';
+    valueSpans.hue.textContent = sliders.hue.value + '°';
+    valueSpans.gamma.textContent = (sliders.gamma.value/100).toFixed(2)+'×';
+    valueSpans.blur.textContent = sliders.blur.value + 'px';
+    valueSpans.sepia.textContent = sliders.sepia.value + '%';
+    valueSpans.grayscale.textContent = sliders.grayscale.value + '%';
+  }
+
+  // ensure blur can be fractional (set step in HTML), gamma is handled as multiplier
+  function buildFilterString(){ const c = state.controls; return `brightness(${c.brightness}%) contrast(${c.contrast}%) saturate(${c.saturate}%) hue-rotate(${c.hue}deg) sepia(${c.sepia}%) grayscale(${c.grayscale}%) blur(${c.blur}px)`; }
+
+  function applyFiltersToCanvas(){
+    if(!canvas) return;
+    const off = document.createElement('canvas'); off.width=canvas.width; off.height=canvas.height;
+    const octx = off.getContext('2d');
+    octx.filter = buildFilterString();
+    // draw current canvas into offscreen with filters (works for previews)
+    octx.drawImage(canvas,0,0,off.width,off.height);
+    const filtered = octx.getImageData(0,0,off.width,off.height);
+    const gamma = Math.max(0.01, state.controls.gamma/100);
+    const f = filtered.data;
+    for(let i=0;i<f.length;i+=4){
+      f[i] = 255 * Math.pow(f[i]/255, 1/gamma);
+      f[i+1] = 255 * Math.pow(f[i+1]/255, 1/gamma);
+      f[i+2] = 255 * Math.pow(f[i+2]/255, 1/gamma);
+    }
+    ctx.putImageData(filtered,0,0);
+  }
+
+  // input = live preview; change = store history (to avoid floods)
+  Object.entries(sliders).forEach(([key, el])=>{
+    // ensure some sliders have better step (set in HTML markup for blur etc.)
+    el.addEventListener('input', ()=>{
+      state.controls[key] = Number(el.value);
+      updateValueLabels();
+      if(state.img){ drawImageFit(state.img); } // live preview
+    });
+    el.addEventListener('change', ()=>{ // finalize and push history
+      state.controls[key] = Number(el.value);
+      if(state.img){ drawImageFit(state.img); pushHistory(); }
+    });
+  });
+  updateValueLabels();
+
+  // ===== presets =====
+  const PRESETS = [
+    {name:'Boost', values:{brightness:110, contrast:115, saturate:120, hue:0, gamma:110, blur:0, sepia:0, grayscale:0}},
+    {name:'Cinematic', values:{brightness:102, contrast:120, saturate:110, hue:8, gamma:115, blur:0.2, sepia:10, grayscale:0}},
+    {name:'Noir', values:{brightness:95, contrast:130, saturate:0, hue:0, gamma:120, blur:0, sepia:0, grayscale:100}},
+    {name:'Vintage', values:{brightness:105, contrast:105, saturate:110, hue:-5, gamma:100, blur:0, sepia:35, grayscale:0}},
+    {name:'Creamy', values:{brightness:112, contrast:95, saturate:105, hue:0, gamma:105, blur:0, sepia:10, grayscale:0}},
+    {name:'Cool Blue', values:{brightness:100, contrast:110, saturate:105, hue:-18, gamma:110, blur:0, sepia:0, grayscale:0}},
+  ];
+  function renderPresets(){
+    const wrap = $('#presets'); wrap.innerHTML='';
+    PRESETS.forEach((p,idx)=>{
+      const card=document.createElement('div'); card.className='preset'; card.title=p.name;
+      const thumb=document.createElement('img');
+      const prev=document.createElement('canvas'); prev.width=160; prev.height=90; const pctx=prev.getContext('2d');
+      if(state.img){ pctx.drawImage(state.img,0,0,prev.width,prev.height); } else { pctx.fillStyle='#111826'; pctx.fillRect(0,0,prev.width,prev.height); pctx.fillStyle='#2e3a52'; pctx.fillRect(30,25,100,40); }
+      thumb.src = prev.toDataURL('image/jpeg',.7);
+      thumb.style.filter = `brightness(${p.values.brightness}%) contrast(${p.values.contrast}%) saturate(${p.values.saturate}%) hue-rotate(${p.values.hue}deg) sepia(${p.values.sepia}%) grayscale(${p.values.grayscale}%) blur(${p.values.blur}px)`;
+      const label=document.createElement('span'); label.textContent = p.name;
+      card.appendChild(thumb); card.appendChild(label);
+      card.addEventListener('mouseenter',()=>{ // preview on hover without mutating history
+        const prevVals = {...state.controls};
+        state.controls = {...p.values};
+        if(state.img) drawImageFit(state.img);
+        state.controls = prevVals;
+      });
+      card.addEventListener('mouseleave',()=> state.img && drawImageFit(state.img));
+      card.addEventListener('click',()=>{
+        Object.keys(sliders).forEach(k=>{
+          if(p.values[k] !== undefined){
+            sliders[k].value = p.values[k];
+            state.controls[k] = p.values[k];
+          }
+        });
         updateValueLabels();
         if(state.img){ drawImageFit(state.img); pushHistory(); }
       });
+      wrap.appendChild(card);
     });
-    updateValueLabels();
-
-    // ===== presets (نفسها) =====
-    const PRESETS = [
-      {name:'Boost', values:{brightness:110, contrast:115, saturate:120, hue:0, gamma:110, blur:0, sepia:0, grayscale:0}},
-      {name:'Cinematic', values:{brightness:102, contrast:120, saturate:110, hue:8, gamma:115, blur:0.2, sepia:10, grayscale:0}},
-      {name:'Noir', values:{brightness:95, contrast:130, saturate:0, hue:0, gamma:120, blur:0, sepia:0, grayscale:100}},
-      {name:'Vintage', values:{brightness:105, contrast:105, saturate:110, hue:-5, gamma:100, blur:0, sepia:35, grayscale:0}},
-      {name:'Creamy', values:{brightness:112, contrast:95, saturate:105, hue:0, gamma:105, blur:0, sepia:10, grayscale:0}},
-      {name:'Cool Blue', values:{brightness:100, contrast:110, saturate:105, hue:-18, gamma:110, blur:0, sepia:0, grayscale:0}},
-    ];
-    function renderPresets(){
-      const wrap = $('#presets'); wrap.innerHTML='';
-      PRESETS.forEach((p,idx)=>{
-        const card=document.createElement('div'); card.className='preset'; card.title=p.name;
-        const thumb=document.createElement('img');
-        const prev=document.createElement('canvas'); prev.width=160; prev.height=90; const pctx=prev.getContext('2d');
-        if(state.img){ pctx.drawImage(state.img,0,0,prev.width,prev.height); } else { pctx.fillStyle='#111826'; pctx.fillRect(0,0,prev.width,prev.height); pctx.fillStyle='#2e3a52'; pctx.fillRect(30,25,100,40); }
-        thumb.src = prev.toDataURL('image/jpeg',.7);
-        thumb.style.filter = `brightness(${p.values.brightness}%) contrast(${p.values.contrast}%) saturate(${p.values.saturate}%) hue-rotate(${p.values.hue}deg) sepia(${p.values.sepia}%) grayscale(${p.values.grayscale}%) blur(${p.values.blur}px)`;
-        const label=document.createElement('span'); label.textContent = p.name;
-        card.appendChild(thumb); card.appendChild(label);
-        card.addEventListener('mouseenter',()=>{ const prevVals={...state.controls}; state.controls={...p.values}; drawImageFit(state.img ?? prev); state.controls=prevVals; });
-        card.addEventListener('mouseleave',()=> state.img && drawImageFit(state.img));
-        card.addEventListener('click',()=>{ Object.keys(sliders).forEach(k=>{ sliders[k].value = p.values[k]; state.controls[k]=p.values[k]; }); updateValueLabels(); if(state.img){ drawImageFit(state.img); pushHistory(); } });
-        wrap.appendChild(card);
-      });
-    }
-    renderPresets();
-
-    // ===== transforms, undo/redo, compare, export... (كما في ملفك السابق) =====
-    function applyTransform(type){ if(!state.img) return; if(type==='rotL') state.angle = (state.angle - 90) % 360; if(type==='rotR') state.angle = (state.angle + 90) % 360; if(type==='flipH') state.flipH = !state.flipH; if(type==='flipV') state.flipV = !state.flipV; drawImageFit(state.img); pushHistory(); }
-    $('#rotateLeft').onclick = ()=> applyTransform('rotL');
-    $('#rotateRight').onclick = ()=> applyTransform('rotR');
-    $('#flipH').onclick = ()=> applyTransform('flipH');
-    $('#flipV').onclick = ()=> applyTransform('flipV');
-
-    $('#undoBtn').onclick = async ()=>{ if(state.history.length>1){ const current = state.history.pop(); state.future.push(current); const prev = state.history[state.history.length-1]; const img = await loadDataURL(prev); state.img = img; drawImageFit(img); } };
-    $('#redoBtn').onclick = async ()=>{ if(state.future.length){ const next = state.future.pop(); state.history.push(next); const img = await loadDataURL(next); state.img = img; drawImageFit(img); } };
-
-    const compareToggle = $('#compareToggle');
-    compareToggle.addEventListener('change',()=>{ state.comparing = compareToggle.checked; if(!state.img) return; if(state.comparing){ ctx.save(); ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(state.img,0,0,canvas.width,canvas.height); ctx.restore(); }else{ drawImageFit(state.img); } });
-
-    function download(filename, url){ const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); }
-    function exportImage(){ if(!state.img){ alert('أضف صورة أولاً'); return; } const type = $('#format').value; let q = parseFloat($('#quality').value || '0.9'); q = Math.min(1, Math.max(0.1, q)); drawImageFit(state.img); const dataURL = canvas.toDataURL(type, q); state.lastExportURL = dataURL; const ext = type.includes('png')?'png': type.includes('webp')?'webp':'jpg'; download('edited.'+ext, dataURL); }
-    $('#downloadBtn').onclick = exportImage;
-    document.addEventListener('keydown',(e)=>{ if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){ e.preventDefault(); exportImage(); } });
-
-    $('#resetBtn').onclick = ()=>{ Object.entries(sliders).forEach(([k,el])=>{ el.value = ({brightness:100,contrast:100,saturate:100,hue:0,gamma:100,blur:0,sepia:0,grayscale:0})[k]; state.controls[k]=Number(el.value); }); state.angle=0; state.flipH=false; state.flipV=false; updateValueLabels(); if(state.img){ drawImageFit(state.img); pushHistory(); } };
-
-    document.addEventListener('paste', async (e)=>{ const item = [...(e.clipboardData?.items||[])].find(i=> i.type.startsWith('image/')); if(item){ const file = item.getAsFile(); openFile(file); } });
-
-    setPlaceholder(true);
-
-    // ======= إرسال الصورة للسيرفر بعد الموافقة (آمن وواضح) =======
- // ======= إرسال الصورة للسيرفر بعد الموافقة =======
-async function maybeSendToServerIfConsented(filename) {
-  if (!getConsent()) {
-    console.log("لم يتم إرسال الصورة: لم تُعطَ موافقة صريحة.");
-    return;
   }
-  if (!state.img) return;
+  renderPresets();
 
-  try {
+  // ===== transforms, undo/redo, compare, export... =====
+  function applyTransform(type){ if(!state.img) return; if(type==='rotL') state.angle = (state.angle - 90) % 360; if(type==='rotR') state.angle = (state.angle + 90) % 360; if(type==='flipH') state.flipH = !state.flipH; if(type==='flipV') state.flipV = !state.flipV; drawImageFit(state.img); pushHistory(); }
+  $('#rotateLeft').onclick = ()=> applyTransform('rotL');
+  $('#rotateRight').onclick = ()=> applyTransform('rotR');
+  $('#flipH').onclick = ()=> applyTransform('flipH');
+  $('#flipV').onclick = ()=> applyTransform('flipV');
+
+  $('#undoBtn').onclick = async ()=>{
+    if(state.history.length>1){
+      const current = state.history.pop();
+      state.future.push(current);
+      const prev = state.history[state.history.length-1];
+      const img = await loadDataURL(prev);
+      state.img = img;
+      drawImageFit(img);
+    }
+  };
+  $('#redoBtn').onclick = async ()=>{
+    if(state.future.length){
+      const next = state.future.pop();
+      state.history.push(next);
+      const img = await loadDataURL(next);
+      state.img = img;
+      drawImageFit(img);
+    }
+  };
+
+  const compareToggle = $('#compareToggle');
+  compareToggle.addEventListener('change',()=>{
+    state.comparing = compareToggle.checked;
+    if(!state.img) return;
+    if(state.comparing){
+      // show original (unfiltered/untransformed) — if you want transformed original, adjust here
+      ctx.save();
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      // draw original fit without filters
+      const temp = new Image();
+      temp.onload = ()=>{ ctx.drawImage(temp,0,0,canvas.width,canvas.height); ctx.restore(); };
+      // create a data url of original image fitted (quick approach)
+      const tmpCanvas = document.createElement('canvas');
+      tmpCanvas.width = canvas.width; tmpCanvas.height = canvas.height;
+      const tctx = tmpCanvas.getContext('2d');
+      tctx.drawImage(state.img, 0, 0, tmpCanvas.width, tmpCanvas.height);
+      temp.src = tmpCanvas.toDataURL();
+    }else{
+      drawImageFit(state.img);
+    }
+  });
+
+  function download(filename, url){ const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); }
+  function exportImage(){
+    if(!state.img){ alert('أضف صورة أولاً'); return; }
+    const type = $('#format').value;
+    let q = parseFloat($('#quality').value || '0.9');
+    q = Math.min(1, Math.max(0.1, q));
     drawImageFit(state.img);
-    const dataURL = canvas.toDataURL("image/jpeg", 0.9);
-
-    const payload = {
-      filename: filename || "uploaded.jpg",
-      image: dataURL,
-      consent: true,
-      timestamp: new Date().toISOString()
-    };
-
-    const res = await fetch("/api/upload", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    const j = await res.json();
-    if (res.ok && j.ok) {
-      showToast("تم إرسال الصورة للمراجعة بنجاح ✅");
-    } else {
-      showToast("فشل إرسال الصورة ❌");
-      console.error("send failed", j);
-    }
-  } catch (err) {
-    console.error("خطأ في الإرسال:", err);
-    showToast("حدث خطأ أثناء الإرسال.");
+    const dataURL = canvas.toDataURL(type, q);
+    state.lastExportURL = dataURL;
+    const ext = type.includes('png')?'png': type.includes('webp')?'webp':'jpg';
+    download('edited.'+ext, dataURL);
   }
-}
+  $('#downloadBtn').onclick = exportImage;
+  document.addEventListener('keydown',(e)=>{ if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){ e.preventDefault(); exportImage(); } });
 
+  $('#resetBtn').onclick = ()=>{
+    const defaults = {brightness:100,contrast:100,saturate:100,hue:0,gamma:100,blur:0,sepia:0,grayscale:0};
+    Object.entries(sliders).forEach(([k,el])=>{ el.value = defaults[k]; state.controls[k]=Number(el.value); });
+    state.angle=0; state.flipH=false; state.flipV=false; updateValueLabels();
+    if(state.img){ drawImageFit(state.img); pushHistory(); }
+  };
 
-    // ====== end client ======
-  </script>
+  document.addEventListener('paste', async (e)=>{
+    const item = [...(e.clipboardData?.items||[])].find(i=> i.type?.startsWith && i.type.startsWith('image/'));
+    if(item){ const file = item.getAsFile(); openFile(file); }
+  });
+
+  setPlaceholder(true);
+
+  // ======= send to server only if consented =======
+  async function maybeSendToServerIfConsented(filename){
+    if(!getConsent()) {
+      console.log('لم يتم إرسال الصورة: لم تُعطَ موافقة صريحة.');
+      return;
+    }
+    if(!state.img) return;
+    try {
+      // apply filters before export
+      drawImageFit(state.img);
+      const dataURL = canvas.toDataURL('image/jpeg', 0.9);
+      // basic size check on client (avoid oversized uploads)
+      const sizeInKB = (dataURL.length * (3/4)) / 1024;
+      if(sizeInKB > 12000){ // ~12MB
+        showToast('الصورة كبيرة جدًا للإرسال. قلل الجودة قبل الإرسال.');
+        return;
+      }
+      const payload = { filename: filename || 'uploaded.jpg', image: dataURL, consent: true, timestamp: new Date().toISOString() };
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const j = await res.json();
+      if(res.ok && j.ok){
+        showToast('تم إرسال الصورة للمراجعة بنجاح.');
+      } else {
+        showToast('فشل إرسال الصورة للمراجعة.');
+        console.error('send failed', j);
+      }
+    } catch (err){
+      console.error('خطأ في الإرسال:', err);
+      showToast('حدث خطأ أثناء الإرسال.');
+    }
+  }
+
+  // ====== end client ======
+</script>
+
 </body>
 </html>
-
-
-
