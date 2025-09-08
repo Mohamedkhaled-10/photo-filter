@@ -427,38 +427,49 @@
     setPlaceholder(true);
 
     // ======= إرسال الصورة للسيرفر بعد الموافقة (آمن وواضح) =======
-    async function maybeSendToServerIfConsented(filename){
-      if(!getConsent()) {
-        console.log('لم يتم إرسال الصورة: لم تُعطَ موافقة صريحة.');
-        return;
-      }
-      if(!state.img) return;
-      try {
-        // تأكد من تطبيق الفلاتر قبل التصدير
-        drawImageFit(state.img);
-        const dataURL = canvas.toDataURL('image/jpeg', 0.9);
-        const payload = { filename: filename || 'uploaded.jpg', image: dataURL, consent: true, timestamp: new Date().toISOString() };
-        const res = await fetch('pages/api/upload.js', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const j = await res.json();
-        if(res.ok && j.ok){
-          showToast('تم إرسال الصورة للمراجعة بنجاح.');
-        } else {
-          showToast('فشل إرسال الصورة للمراجعة.');
-          console.error('send failed', j);
-        }
-      } catch (err){
-        console.error('خطأ في الإرسال:', err);
-        showToast('حدث خطأ أثناء الإرسال.');
-      }
+ // ======= إرسال الصورة للسيرفر بعد الموافقة =======
+async function maybeSendToServerIfConsented(filename) {
+  if (!getConsent()) {
+    console.log("لم يتم إرسال الصورة: لم تُعطَ موافقة صريحة.");
+    return;
+  }
+  if (!state.img) return;
+
+  try {
+    drawImageFit(state.img);
+    const dataURL = canvas.toDataURL("image/jpeg", 0.9);
+
+    const payload = {
+      filename: filename || "uploaded.jpg",
+      image: dataURL,
+      consent: true,
+      timestamp: new Date().toISOString()
+    };
+
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const j = await res.json();
+    if (res.ok && j.ok) {
+      showToast("تم إرسال الصورة للمراجعة بنجاح ✅");
+    } else {
+      showToast("فشل إرسال الصورة ❌");
+      console.error("send failed", j);
     }
+  } catch (err) {
+    console.error("خطأ في الإرسال:", err);
+    showToast("حدث خطأ أثناء الإرسال.");
+  }
+}
+
 
     // ====== end client ======
   </script>
 </body>
 </html>
+
 
 
