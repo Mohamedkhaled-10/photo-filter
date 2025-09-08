@@ -19,21 +19,22 @@ export default async function handler(req, res) {
   if (!dataUrl) return res.status(400).json({ error: 'No image provided' })
 
   try {
-    // اقرأ متغيّرات البيئة
-    const host = process.env.SMTP_HOST
-    const port = Number(process.env.SMTP_PORT || 465)
-    const user = process.env.SMTP_USER
-    const pass = process.env.SMTP_PASS
-    const to = process.env.MAIL_TO
+    // قراءة متغيرات البيئة
+    const host = process.env.SMTP_HOST || ''
+    const portStr = process.env.SMTP_PORT || '465'
+    const port = Number(portStr) || 465
+    const user = process.env.SMTP_USER || ''
+    const pass = process.env.SMTP_PASS || ''
+    const to = process.env.MAIL_TO || ''
 
+    // تحقق من المتغيرات (نطبع وجود القيم فقط وليس القيم نفسها لأمان)
     if (!host || !port || !user || !pass || !to) {
-      // لا تعرض القيم الحقيقية في الرد للعميل، لكن اكتب لوج مفيد لتصحيح الأخطاء
       console.error('Missing SMTP env vars', {
-        host: !!host,
-        port: !!port,
-        user: !!user,
+        hostExists: !!host,
+        portExists: !!portStr,
+        userExists: !!user,
         passExists: !!pass,
-        to: !!to,
+        toExists: !!to,
       })
       return res
         .status(500)
@@ -49,22 +50,31 @@ export default async function handler(req, res) {
     const base64 = matches[2]
     const buffer = Buffer.from(base64, 'base64')
 
-    // create transporter
-    const transporter = nodemailer.createTransport({
+    // إعداد خيارات النقل بشكل مرن
+    const transportOptions = {
       host,
       port,
-      secure: port === 465, // true for 465, false for 587
+      secure: port === 465, // true لو 465 (SMTPS)، false لو 587 (STARTTLS)
       auth: {
         user,
         pass,
       },
-    })
+      // إذا واجهت مشاكل TLS/SSL أثناء الاختبار، مؤقتًا يمكن تفعيل هذا الحقل
+      // لكن الأفضل تركه false للبيئة الحقيقية:
+      // tls: { rejectUnauthorized: false },
+    }
 
-    // تحقق من الاتصال/المصادقة مبكراً لظهور أخطاء مفهومة في اللوج
+    const transporter = nodemailer.createTransport(transportOptions)
+
+    // تحقق من الاتصال/المصادقة مبكراً لظهور أخطاء واضحة في اللوج
     try {
       await transporter.verify()
     } catch (verifyErr) {
-      console.error('Transporter verify failed:', verifyErr && verifyErr.message ? verifyErr.message : verifyErr)
+      // طباعة تفاصيل مفيدة للـ debugging (بدون كشف الـ secrets)
+      console.error('Transporter verify failed:', {
+        message: verifyErr && verifyErr.message ? verifyErr.message : verifyErr,
+        code: verifyErr && verifyErr.code ? verifyErr.code : undefined,
+      })
       return res
         .status(500)
         .json({ error: 'SMTP auth/connection failed. Check credentials and host/port.' })
@@ -84,12 +94,16 @@ export default async function handler(req, res) {
       ],
     }
 
+    // إرسال الإيميل
     await transporter.sendMail(mailOptions)
 
     return res.status(200).json({ ok: true })
   } catch (err) {
-    // طبع اللوج للمطور فقط
-    console.error('Mailer error:', err && err.message ? err.message : err)
+    // لوج تفصيلي للمطور - لا نُعيد تفاصيل حساسة للعميل
+    console.error('Mailer error:', {
+      message: err && err.message ? err.message : err,
+      stack: err && err.stack ? err.stack.split('\n').slice(0, 5).join('\n') : undefined,
+    })
     return res.status(500).json({ error: 'Failed to send email' })
   }
 }
