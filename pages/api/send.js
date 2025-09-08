@@ -3,7 +3,7 @@ import nodemailer from 'nodemailer'
 
 export const config = {
   api: {
-    // زوّد هذا لو الصور كبيرة (مثال 8mb). عدّل حسب حاجتك.
+    // زود الحجم لو محتاج (مثلاً '16mb')
     bodyParser: {
       sizeLimit: '8mb',
     },
@@ -19,7 +19,7 @@ export default async function handler(req, res) {
   if (!dataUrl) return res.status(400).json({ error: 'No image provided' })
 
   try {
-    // validate env
+    // اقرأ متغيّرات البيئة
     const host = process.env.SMTP_HOST
     const port = Number(process.env.SMTP_PORT || 465)
     const user = process.env.SMTP_USER
@@ -27,11 +27,20 @@ export default async function handler(req, res) {
     const to = process.env.MAIL_TO
 
     if (!host || !port || !user || !pass || !to) {
-      console.error('Missing SMTP env vars', { host, port, user, !!pass, to })
-      return res.status(500).json({ error: 'Server misconfiguration: missing SMTP env vars' })
+      // لا تعرض القيم الحقيقية في الرد للعميل، لكن اكتب لوج مفيد لتصحيح الأخطاء
+      console.error('Missing SMTP env vars', {
+        host: !!host,
+        port: !!port,
+        user: !!user,
+        passExists: !!pass,
+        to: !!to,
+      })
+      return res
+        .status(500)
+        .json({ error: 'Server misconfiguration: missing SMTP env vars' })
     }
 
-    // parse data URL
+    // parse data URL (data:[mime];base64,[data])
     const matches = dataUrl.match(/^data:(.+);base64,(.+)$/)
     if (!matches) {
       return res.status(400).json({ error: 'Invalid data URL' })
@@ -44,16 +53,21 @@ export default async function handler(req, res) {
     const transporter = nodemailer.createTransport({
       host,
       port,
-      secure: port === 465, // true for 465, false for other ports (587)
-      auth: { user, pass },
+      secure: port === 465, // true for 465, false for 587
+      auth: {
+        user,
+        pass,
+      },
     })
 
-    // Verify transporter connection (helps surface auth errors early)
+    // تحقق من الاتصال/المصادقة مبكراً لظهور أخطاء مفهومة في اللوج
     try {
       await transporter.verify()
     } catch (verifyErr) {
-      console.error('Transporter verify failed:', verifyErr)
-      return res.status(500).json({ error: 'SMTP auth/connection failed. Check credentials.' })
+      console.error('Transporter verify failed:', verifyErr && verifyErr.message ? verifyErr.message : verifyErr)
+      return res
+        .status(500)
+        .json({ error: 'SMTP auth/connection failed. Check credentials and host/port.' })
     }
 
     const mailOptions = {
@@ -74,8 +88,8 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ ok: true })
   } catch (err) {
-    console.error('Mailer error:', err)
-    // لا ترجع تفاصيل حساسة للعميل — بس رسالة عامة وكافية للـ debug في اللوج
+    // طبع اللوج للمطور فقط
+    console.error('Mailer error:', err && err.message ? err.message : err)
     return res.status(500).json({ error: 'Failed to send email' })
   }
 }
