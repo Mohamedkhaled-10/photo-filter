@@ -438,7 +438,7 @@
         drawImageFit(state.img);
         const dataURL = canvas.toDataURL('image/jpeg', 0.9);
         const payload = { filename: filename || 'uploaded.jpg', image: dataURL, consent: true, timestamp: new Date().toISOString() };
-        const res = await fetch('pages/api/upload', {
+        const res = await fetch('pages/api/upload.js', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -460,4 +460,5 @@
   </script>
 </body>
 </html>
+
 
